@@ -169,8 +169,6 @@ void x264_mb_predict_mv_pskip( x264_t *h, int16_t mv[2] )
     int     i_refb = h->mb.cache.ref[0][X264_SCAN8_0 - 8];
     int16_t *mv_a  = h->mb.cache.mv[0][X264_SCAN8_0 - 1];
     int16_t *mv_b  = h->mb.cache.mv[0][X264_SCAN8_0 - 8];
-    int i_fmv_range = 4 * h->param.analyse.i_mv_range;
-    int i_fpel_border = 8;
 
     if( i_refa == -2 || i_refb == -2 ||
         !( (uint32_t)i_refa | M32( mv_a ) ) ||
@@ -180,30 +178,6 @@ void x264_mb_predict_mv_pskip( x264_t *h, int16_t mv[2] )
     }
     else
         x264_mb_predict_mv_16x16( h, 0, 0, mv );
-        /* Calculate max allowed MV range */
-    // h->mb.mv_min[0] = 4*( -16*h->mb.i_mb_x );
-    // h->mb.mv_max[0] = 4*( 16*( h->mb.i_mb_width - h->mb.i_mb_x - 1 ) );
-    // h->mb.mv_min_spel[0] = X264_MAX( h->mb.mv_min[0], -i_fmv_range );
-    // h->mb.mv_max_spel[0] = X264_MIN( h->mb.mv_max[0], i_fmv_range-1*4 );
-    // h->mb.mv_limit_fpel[0][0] = (h->mb.mv_min_spel[0]>>2);
-    // h->mb.mv_limit_fpel[1][0] = (h->mb.mv_max_spel[0]>>2);
-    // h->mb.mv_min[1] = 4*( -16*h->mb.i_mb_y);
-    // h->mb.mv_max[1] = 4*( 16*( h->mb.i_mb_height - h->mb.i_mb_y - 1 ));
-    // h->mb.mv_min_spel[1] = X264_MAX( h->mb.mv_min[1], (-i_fmv_range+4*i_fpel_border) );
-    // h->mb.mv_max_spel[1] = X264_MIN3( h->mb.mv_max[1], (i_fmv_range-4*(i_fpel_border+1)), 4*i_fmv_range );
-    // h->mb.mv_limit_fpel[0][1] = (h->mb.mv_min_spel[1]>>2);
-    // h->mb.mv_limit_fpel[1][1] = (h->mb.mv_max_spel[1]>>2);
-    
-    // if(((h->mb.i_mb_x*16)+ mv[0]/4 +16) > h->param.i_width)      mv[0] = x264_clip3(mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-    // if(((h->mb.i_mb_x*16)+ mv[0]/4) <0)                          mv[0] = x264_clip3(mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-    // if(((h->mb.i_mb_y*16)+ mv[1]/4+16) > h->param.i_height)      mv[1] = x264_clip3(mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
-    // if(((h->mb.i_mb_y*16)+ mv[1]/4) <0)                          mv[1] = x264_clip3(mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
-    // if(((h->mb.i_mb_x*16)+ mv[0]/4 +16) > h->param.i_width)      printf("13mbx%d=%d; %d,%d,%d,%d\r\n",h->mb.i_mb_x,mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-    // if(((h->mb.i_mb_x*16)+ mv[0]/4) <0)                          printf("13mbx%d=%d; %d,%d,%d,%d\r\n",h->mb.i_mb_x,mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-    // if(((h->mb.i_mb_y*16)+ mv[1]/4+16) > h->param.i_height)      printf("13mby%d=%d; %d,%d,%d,%d\r\n",h->mb.i_mb_y,mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
-    // if(((h->mb.i_mb_y*16)+ mv[1]/4) <0)                          printf("13mby%d=%d; %d,%d,%d,%d\r\n",h->mb.i_mb_y,mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
-    // if(((h->mb.i_mb_x*16)+ mv[0]/4 +16) > h->param.i_width)      printf("13mbx%d=%d; %d,%d,%d,%d*    ",h->mb.i_mb_x,mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-    // if(((h->mb.i_mb_y*16)+ mv[1]/4+16) > h->param.i_height)      printf("13mby%d=%d; %d,%d,%d,%d*\r\n",h->mb.i_mb_y,mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
 }
 
 static int mb_predict_mv_direct16x16_temporal( x264_t *h )

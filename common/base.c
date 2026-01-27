@@ -229,7 +229,7 @@ char *x264_param_strdup( x264_param_t *param, const char *src )
         if( buf->size > (INT_MAX - BUFFER_OFFSET) / 2 / (int)sizeof(void *) )
             goto fail;
         int new_size = buf->size * 2;
-	buf = realloc( buf, BUFFER_OFFSET + new_size * sizeof(void *) );
+        buf = realloc( buf, BUFFER_OFFSET + new_size * sizeof(void *) );
         if( !buf )
             goto fail;
         buf->size = new_size;
@@ -348,7 +348,7 @@ REALIGN_STACK void x264_param_default( x264_param_t *param )
 
     /* CPU autodetect */
     param->cpu = x264_cpu_detect();
-    param->i_threads = 1;
+    param->i_threads = X264_THREADS_AUTO;
     param->i_lookahead_threads = X264_THREADS_AUTO;
     param->b_deterministic = 1;
     param->i_sync_lookahead = X264_SYNC_LOOKAHEAD_AUTO;
@@ -382,7 +382,7 @@ REALIGN_STACK void x264_param_default( x264_param_t *param )
 
     /* Encoder parameters */
     param->i_frame_reference = 3;
-    param->i_keyint_max = 30;
+    param->i_keyint_max = 250;
     param->i_keyint_min = X264_KEYINT_MIN_AUTO;
     param->i_bframe = 3;
     param->i_scenecut_threshold = 40;
@@ -406,8 +406,8 @@ REALIGN_STACK void x264_param_default( x264_param_t *param )
     param->rc.i_vbv_buffer_size = 0;
     param->rc.f_vbv_buffer_init = 0.9;
     param->rc.i_qp_constant = -1;
-    param->rc.f_rf_constant = 30;
-    param->rc.i_qp_min = 12;
+    param->rc.f_rf_constant = 23;
+    param->rc.i_qp_min = 0;
     param->rc.i_qp_max = INT_MAX;
     param->rc.i_qp_step = 4;
     param->rc.f_ip_factor = 1.4;
@@ -444,10 +444,10 @@ REALIGN_STACK void x264_param_default( x264_param_t *param )
     param->analyse.i_subpel_refine = 7;
     param->analyse.b_mixed_references = 1;
     param->analyse.b_chroma_me = 1;
-    param->analyse.i_mv_range_thread = -1;
+    param->analyse.i_mv_range_thread = 32;
     param->analyse.i_mv_range = 32; // set from level_idc
     param->analyse.i_chroma_qp_offset = 0;
-    param->analyse.b_fast_pskip = 1;
+    param->analyse.b_fast_pskip = 0;
     param->analyse.b_weighted_bipred = 1;
     param->analyse.i_weighted_pred = X264_WEIGHTP_SMART;
     param->analyse.b_dct_decimate = 1;
@@ -498,10 +498,10 @@ static int param_apply_preset( x264_param_t *param, const char *preset )
         param->i_frame_reference = 1;
         param->i_scenecut_threshold = 0;
         param->b_deblocking_filter = 0;
-        param->b_cabac = 1;
+        param->b_cabac = 0;
         param->i_bframe = 0;
         param->analyse.intra = 0;
-        param->analyse.inter = X264_ANALYSE_PSUB16x16;
+        param->analyse.inter = 0;
         param->analyse.b_transform_8x8 = 0;
         param->analyse.i_me_method = X264_ME_DIA;
         param->analyse.i_subpel_refine = 0;
