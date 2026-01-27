@@ -1,7 +1,7 @@
 /*****************************************************************************
  * analyse.c: macroblock analysis
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -330,14 +330,14 @@ static void mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int qp )
         int i_fmv_range = 4 * h->param.analyse.i_mv_range;
         // limit motion search to a slightly smaller range than the theoretical limit,
         // since the search may go a few iterations past its given range
-        int i_fpel_border = 6; // umh: 1 for diamond, 2 for octagon, 2 for hpel
+        int i_fpel_border = 8; // umh: 1 for diamond, 2 for octagon, 2 for hpel
 
         /* Calculate max allowed MV range */
-        h->mb.mv_min[0] = 4*( -16*h->mb.i_mb_x - 24 );
-        h->mb.mv_max[0] = 4*( 16*( h->mb.i_mb_width - h->mb.i_mb_x - 1 ) + 24 );
-        h->mb.mv_min_spel[0] = X264_MAX( h->mb.mv_min[0], -i_fmv_range );
-        h->mb.mv_max_spel[0] = X264_MIN( h->mb.mv_max[0], i_fmv_range-1 );
-        if( h->param.b_intra_refresh && h->sh.i_type == SLICE_TYPE_P )
+        h->mb.mv_min[0] = 4*( -16*h->mb.i_mb_x );
+        h->mb.mv_max[0] = 4*( 16*( h->mb.i_mb_width - h->mb.i_mb_x - 1 ) );
+       	h->mb.mv_min_spel[0] = X264_MAX( h->mb.mv_min[0], -i_fmv_range );
+        h->mb.mv_max_spel[0] = X264_MIN( h->mb.mv_max[0], i_fmv_range-1*4 );
+	if( h->param.b_intra_refresh && h->sh.i_type == SLICE_TYPE_P )
         {
             int max_x = (h->fref[0][0]->i_pir_end_col * 16 - 3)*4; /* 3 pixels of hpel border */
             int max_mv = max_x - 4*16*h->mb.i_mb_x;
@@ -345,8 +345,8 @@ static void mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int qp )
             if( max_mv > 0 && h->mb.i_mb_x < h->fdec->i_pir_start_col )
                 h->mb.mv_max_spel[0] = X264_MIN( h->mb.mv_max_spel[0], max_mv );
         }
-        h->mb.mv_limit_fpel[0][0] = (h->mb.mv_min_spel[0]>>2) + i_fpel_border;
-        h->mb.mv_limit_fpel[1][0] = (h->mb.mv_max_spel[0]>>2) - i_fpel_border;
+        h->mb.mv_limit_fpel[0][0] = (h->mb.mv_min_spel[0]>>2);
+        h->mb.mv_limit_fpel[1][0] = (h->mb.mv_max_spel[0]>>2);
         if( h->mb.i_mb_x == 0 && !(h->mb.i_mb_y & PARAM_INTERLACED) )
         {
             int mb_y = h->mb.i_mb_y >> SLICE_MBAFF;
@@ -378,22 +378,22 @@ static void mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int qp )
                 {
                     int j = i == 2;
                     mb_y = (h->mb.i_mb_y >> j) + (i == 1);
-                    h->mb.mv_miny_row[i] = 4*( -16*mb_y - 24 );
-                    h->mb.mv_maxy_row[i] = 4*( 16*( (h->mb.i_mb_height>>j) - mb_y - 1 ) + 24 );
-                    h->mb.mv_miny_spel_row[i] = X264_MAX( h->mb.mv_miny_row[i], -i_fmv_range );
-                    h->mb.mv_maxy_spel_row[i] = X264_MIN3( h->mb.mv_maxy_row[i], i_fmv_range-1, 4*thread_mvy_range );
-                    h->mb.mv_miny_fpel_row[i] = (h->mb.mv_miny_spel_row[i]>>2) + i_fpel_border;
-                    h->mb.mv_maxy_fpel_row[i] = (h->mb.mv_maxy_spel_row[i]>>2) - i_fpel_border;
+                    h->mb.mv_miny_row[i] = 4*( -16*mb_y);
+                    h->mb.mv_maxy_row[i] = 4*( 16*( (h->mb.i_mb_height>>j) - mb_y - 1 ));
+                    h->mb.mv_miny_spel_row[i] = X264_MAX( h->mb.mv_miny_row[i], -i_fmv_range+4*i_fpel_border);
+                    h->mb.mv_maxy_spel_row[i] = X264_MIN3( h->mb.mv_maxy_row[i], i_fmv_range-4*(i_fpel_border+1), 4*thread_mvy_range );
+                    h->mb.mv_miny_fpel_row[i] = (h->mb.mv_miny_spel_row[i]>>2);
+                    h->mb.mv_maxy_fpel_row[i] = (h->mb.mv_maxy_spel_row[i]>>2);
                 }
             }
             else
             {
-                h->mb.mv_min[1] = 4*( -16*mb_y - 24 );
-                h->mb.mv_max[1] = 4*( 16*( h->mb.i_mb_height - mb_y - 1 ) + 24 );
-                h->mb.mv_min_spel[1] = X264_MAX( h->mb.mv_min[1], -i_fmv_range );
-                h->mb.mv_max_spel[1] = X264_MIN3( h->mb.mv_max[1], i_fmv_range-1, 4*thread_mvy_range );
-                h->mb.mv_limit_fpel[0][1] = (h->mb.mv_min_spel[1]>>2) + i_fpel_border;
-                h->mb.mv_limit_fpel[1][1] = (h->mb.mv_max_spel[1]>>2) - i_fpel_border;
+                h->mb.mv_min[1] = 4*( -16*mb_y);
+                h->mb.mv_max[1] = 4*( 16*( h->mb.i_mb_height - mb_y - 1 ));
+                h->mb.mv_min_spel[1] = X264_MAX( h->mb.mv_min[1], (-i_fmv_range+4*i_fpel_border) );
+                h->mb.mv_max_spel[1] = X264_MIN3( h->mb.mv_max[1], (i_fmv_range-4*(i_fpel_border+1)), 4*thread_mvy_range );
+               	h->mb.mv_limit_fpel[0][1] = (h->mb.mv_min_spel[1]>>2);
+                h->mb.mv_limit_fpel[1][1] = (h->mb.mv_max_spel[1]>>2);
             }
         }
         if( PARAM_INTERLACED )
@@ -468,6 +468,8 @@ static void mb_analyse_init( x264_t *h, x264_mb_analysis_t *a, int qp )
         else
             a->b_force_intra = 0;
     }
+    // if(h->mb.i_mb_x == h->mb.i_mb_width-1)  printf("0mb_x=%d,mb_width=%d,mv_x_maxF=%d, mv_x_maxS=%d\r\n",h->mb.i_mb_x,h->mb.i_mb_width, h->mb.mv_limit_fpel[1][0],h->mb.mv_max[0]);
+    // if(h->mb.i_mb_y == h->mb.i_mb_height-1) printf("0mb_y=%d,mb_height=%d,mv_y_maxF=%d,mv_y_maxS=%d\r\n",h->mb.i_mb_y,h->mb.i_mb_height,h->mb.mv_limit_fpel[1][1],h->mb.mv_max[1]);
 }
 
 /* Prediction modes allowed for various combinations of neighbors. */
@@ -479,7 +481,7 @@ static const int8_t i16x16_mode_available[5][5] =
     {I_PRED_16x16_DC_LEFT, I_PRED_16x16_H, -1, -1, -1},
     {I_PRED_16x16_DC_TOP, I_PRED_16x16_V, -1, -1, -1},
     {I_PRED_16x16_V, I_PRED_16x16_H, I_PRED_16x16_DC, -1, -1},
-    {I_PRED_16x16_V, I_PRED_16x16_H, I_PRED_16x16_DC, I_PRED_16x16_P, -1},
+    {I_PRED_16x16_V, I_PRED_16x16_H, I_PRED_16x16_DC, -1, -1},
 };
 
 static const int8_t chroma_mode_available[5][5] =
@@ -488,7 +490,7 @@ static const int8_t chroma_mode_available[5][5] =
     {I_PRED_CHROMA_DC_LEFT, I_PRED_CHROMA_H, -1, -1, -1},
     {I_PRED_CHROMA_DC_TOP, I_PRED_CHROMA_V, -1, -1, -1},
     {I_PRED_CHROMA_V, I_PRED_CHROMA_H, I_PRED_CHROMA_DC, -1, -1},
-    {I_PRED_CHROMA_V, I_PRED_CHROMA_H, I_PRED_CHROMA_DC, I_PRED_CHROMA_P, -1},
+    {I_PRED_CHROMA_V, I_PRED_CHROMA_H, I_PRED_CHROMA_DC, -1, -1},
 };
 
 static const int8_t i8x8_mode_available[2][5][10] =
@@ -1259,12 +1261,14 @@ static void mb_analyse_inter_p16x16( x264_t *h, x264_mb_analysis_t *a )
     ALIGNED_ARRAY_8( int16_t, mvc,[8],[2] );
     int i_halfpel_thresh = INT_MAX;
     int *p_halfpel_thresh = (a->b_early_terminate && h->mb.pic.i_fref[0]>1) ? &i_halfpel_thresh : NULL;
-
+    // if(h->mb.i_mb_x == h->mb.i_mb_width-1)  printf("3mb_x=%d,mb_width=%d,mv_x_maxF=%d, mv_x_maxS=%d\r\n",h->mb.i_mb_x,h->mb.i_mb_width, h->mb.mv_limit_fpel[1][0],h->mb.mv_max_spel[0]);
+    // if(h->mb.i_mb_y == h->mb.i_mb_height-1) printf("3mb_y=%d,mb_height=%d,mv_y_maxF=%d,mv_y_maxS=%d\r\n",h->mb.i_mb_y,h->mb.i_mb_height,h->mb.mv_limit_fpel[1][1],h->mb.mv_max_spel[1]);
     /* 16x16 Search on all ref frame */
     m.i_pixel = PIXEL_16x16;
     LOAD_FENC( &m, h->mb.pic.p_fenc, 0, 0 );
-
+    
     a->l0.me16x16.cost = INT_MAX;
+    // h->mb.pic.i_fref[0] == 1 ;
     for( int i_ref = 0; i_ref < h->mb.pic.i_fref[0]; i_ref++ )
     {
         m.i_ref_cost = REF_COST( 0, i_ref );
@@ -1274,8 +1278,8 @@ static void mb_analyse_inter_p16x16( x264_t *h, x264_mb_analysis_t *a )
         LOAD_HPELS( &m, h->mb.pic.p_fref[0][i_ref], 0, i_ref, 0, 0 );
         LOAD_WPELS( &m, h->mb.pic.p_fref_w[i_ref], 0, i_ref, 0, 0 );
 
-        x264_mb_predict_mv_16x16( h, 0, i_ref, m.mvp );
-
+       	x264_mb_predict_mv_16x16( h, 0, i_ref, m.mvp );
+        //h->mb.ref_blind_dupe == -1
         if( h->mb.ref_blind_dupe == i_ref )
         {
             CP32( m.mv, a->l0.mvc[0][0] );
@@ -1284,6 +1288,8 @@ static void mb_analyse_inter_p16x16( x264_t *h, x264_mb_analysis_t *a )
         else
         {
             x264_mb_predict_mv_ref16x16( h, 0, i_ref, mvc, &i_mvc );
+            // if(h->mb.i_mb_x == h->mb.i_mb_width-1)  printf("2mb_x=%d,mb_width=%d,mv_x_maxF=%d, mv_x_maxS=%d\r\n",h->mb.i_mb_x,h->mb.i_mb_width, h->mb.mv_limit_fpel[1][0],h->mb.mv_max_spel[0]);
+            // if(h->mb.i_mb_y == h->mb.i_mb_height-1) printf("2mb_y=%d,mb_height=%d,mv_y_maxF=%d,mv_y_maxS=%d\r\n",h->mb.i_mb_y,h->mb.i_mb_height,h->mb.mv_limit_fpel[1][1],h->mb.mv_max_spel[1]);
             x264_me_search_ref( h, &m, mvc, i_mvc, p_halfpel_thresh );
         }
 
@@ -1301,8 +1307,17 @@ static void mb_analyse_inter_p16x16( x264_t *h, x264_mb_analysis_t *a )
             && x264_macroblock_probe_pskip( h ) )
         {
             h->mb.i_type = P_SKIP;
+            // if(((h->mb.i_mb_x*16)+ a->l0.me16x16.mv[0]/4 +16) > h->param.i_width)    a->l0.me16x16.mv[0] = 4*(h->param.i_width-(h->mb.i_mb_x+1)*16);
+            // if(((h->mb.i_mb_x*16)+ a->l0.me16x16.mv[0]/4) <0)                        a->l0.me16x16.mv[0] = 4*(0 - h->mb.i_mb_x*16);
+            // if(((h->mb.i_mb_y*16)+ a->l0.me16x16.mv[1]/4+16) > h->param.i_height)    a->l0.me16x16.mv[1] = 4*(h->param.i_height-(h->mb.i_mb_y+1)*16); 
+            // if(((h->mb.i_mb_y*16)+ a->l0.me16x16.mv[1]/4) <0)                        a->l0.me16x16.mv[1] = 4*(0 - h->mb.i_mb_y*16);        
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
             analyse_update_cache( h, a );
             assert( h->mb.cache.pskip_mv[1] <= h->mb.mv_max_spel[1] || h->i_thread_frames == 1 );
+            if(h->mb.i_mb_x == h->param.i_width-1 || h->mb.i_mb_y ==h->param.i_height-1) printf("mb.mv00=%d,mb.mv01=%d,mb.cache.pskipmv0=%d,mb.cache.pskipmv1=%d",h->mb.mv[0][0],h->mb.mv[0][1],h->mb.cache.pskip_mv[0],h->mb.cache.pskip_mv[1]);
             return;
         }
 
@@ -1312,7 +1327,7 @@ static void mb_analyse_inter_p16x16( x264_t *h, x264_mb_analysis_t *a )
         if( m.cost < a->l0.me16x16.cost )
             h->mc.memcpy_aligned( &a->l0.me16x16, &m, sizeof(x264_me_t) );
     }
-
+    //Only P frame, a->l0.me16x16.i_ref == 0. Update h.mb.cache.ref[0][40] 
     x264_macroblock_cache_ref( h, 0, 0, 4, 4, 0, a->l0.me16x16.i_ref );
     assert( a->l0.me16x16.mv[1] <= h->mb.mv_max_spel[1] || h->i_thread_frames == 1 );
 
@@ -3024,7 +3039,17 @@ intra_analysis:
 skip_analysis:
             /* Set up MVs for future predictors */
             for( int i = 0; i < h->mb.pic.i_fref[0]; i++ )
-                M32( h->mb.mvr[0][i][h->mb.i_mb_xy] ) = 0;
+                    M32( h->mb.mvr[0][i][h->mb.i_mb_xy] ) = 0;
+            // if(((h->mb.i_mb_x*16)+ analysis.l0.me16x16.mv[0]/4 +16) > h->param.i_width)    analysis.l0.me16x16.mv[0] = x264_clip3(analysis.l0.me16x16.mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_x*16)+ analysis.l0.me16x16.mv[0]/4) <0)                        analysis.l0.me16x16.mv[0] = x264_clip3(analysis.l0.me16x16.mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_y*16)+ analysis.l0.me16x16.mv[1]/4+16) > h->param.i_height)    analysis.l0.me16x16.mv[1] = x264_clip3(analysis.l0.me16x16.mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_y*16)+ analysis.l0.me16x16.mv[1]/4) <0)                        analysis.l0.me16x16.mv[1] = x264_clip3(analysis.l0.me16x16.mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)      printf("4mbx%d=%d; %d,%d,%d,%d* ",h->mb.i_mb_x,h->mb.cache.pskip_mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)      printf("4mby%d=%d; %d,%d,%d,%d*\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
         }
         else
         {
@@ -3041,6 +3066,18 @@ skip_analysis:
             {
                 for( int i = 1; i < h->mb.pic.i_fref[0]; i++ )
                     M32( h->mb.mvr[0][i][h->mb.i_mb_xy] ) = 0;
+                // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+                // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+                // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+                // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+                // if(((h->mb.i_mb_x*16)+ analysis.l0.me16x16.mv[0]/4 +16) > h->param.i_width)    analysis.l0.me16x16.mv[0] = x264_clip3(analysis.l0.me16x16.mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+                // if(((h->mb.i_mb_x*16)+ analysis.l0.me16x16.mv[0]/4) <0)                        analysis.l0.me16x16.mv[0] = x264_clip3(analysis.l0.me16x16.mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+                // if(((h->mb.i_mb_y*16)+ analysis.l0.me16x16.mv[1]/4+16) > h->param.i_height)    analysis.l0.me16x16.mv[1] = x264_clip3(analysis.l0.me16x16.mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+                // if(((h->mb.i_mb_y*16)+ analysis.l0.me16x16.mv[1]/4) <0)                        analysis.l0.me16x16.mv[1] = x264_clip3(analysis.l0.me16x16.mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+                // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)      printf("4mbx%d=%d; %d,%d,%d,%d* ",h->mb.i_mb_x,h->mb.cache.pskip_mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+                // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)      printf("4mby%d=%d; %d,%d,%d,%d*\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+                // analyse_update_cache( h, &analysis );
+                if((h->mb.i_mb_x == h->mb.i_mb_width-1) || (h->mb.i_mb_y ==h->mb.i_mb_height-1))  printf("*  mb.mv00=%d, mb.mv01=%d, mb.cache.pskipmv0=%d, mb.cache.pskipmv1=%d \r\n",h->mb.mv[0][0],h->mb.mv[0][1],h->mb.cache.pskip_mv[0],h->mb.cache.pskip_mv[1]);
                 return;
             }
 
@@ -3060,9 +3097,10 @@ skip_analysis:
             if( ( flags & X264_ANALYSE_PSUB16x16 ) && (!analysis.b_early_terminate ||
                 analysis.l0.i_cost8x8 < analysis.l0.me16x16.cost) )
             {
-                i_type = P_8x8;
-                i_partition = D_8x8;
-                i_cost = analysis.l0.i_cost8x8;
+                //use the “P_L0",even cost8x8 < me16x16.cost
+                i_type = P_L0;
+                i_partition = D_16x16;
+                i_cost = analysis.l0.me16x16.cost;
 
                 /* Do sub 8x8 */
                 if( flags & X264_ANALYSE_PSUB8x8 )
@@ -3699,7 +3737,16 @@ skip_analysis:
             }
         }
     }
-
+    if(IS_SKIP(h->mb.i_type)){
+        // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+        // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+        // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+        // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+        // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     printf("8mbx%d=%d\r\n",h->mb.i_mb_x,h->mb.cache.pskip_mv[0]);
+        // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         printf("8mbx%d=%d\r\n",h->mb.i_mb_x,h->mb.cache.pskip_mv[0]);
+        // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     printf("8mby%d=%d\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1]);
+        // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         printf("8mby%d=%d\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1]);
+    }
     analyse_update_cache( h, &analysis );
 
     /* In rare cases we can end up qpel-RDing our way back to a larger partition size
@@ -3795,6 +3842,10 @@ static void analyse_update_cache( x264_t *h, x264_mb_analysis_t *a  )
         case P_SKIP:
         {
             h->mb.i_partition = D_16x16;
+            if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)     h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                         h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)     h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                         h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
             x264_macroblock_cache_ref( h, 0, 0, 4, 4, 0, 0 );
             x264_macroblock_cache_mv_ptr( h, 0, 0, 4, 4, 0, h->mb.cache.pskip_mv );
             break;

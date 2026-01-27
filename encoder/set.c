@@ -1,7 +1,7 @@
 /*****************************************************************************
  * set: header writing
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -101,7 +101,6 @@ void x264_sei_write( bs_t *s, uint8_t *payload, int payload_size, int payload_ty
 void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
 {
     int csp = param->i_csp & X264_CSP_MASK;
-
     sps->i_id = i_id;
     sps->i_mb_width = ( param->i_width + 15 ) / 16;
     sps->i_mb_height= ( param->i_height + 15 ) / 16;
@@ -129,7 +128,7 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->b_constraint_set0  = sps->i_profile_idc == PROFILE_BASELINE;
     /* x264 doesn't support the features that are in Baseline and not in Main,
      * namely arbitrary_slice_order and slice_groups. */
-    sps->b_constraint_set1  = sps->i_profile_idc <= PROFILE_MAIN;
+    sps->b_constraint_set1  = sps->i_profile_idc != PROFILE_MAIN;
     /* Never set constraint_set2, it is not necessary and not used in real world. */
     sps->b_constraint_set2  = 0;
     sps->b_constraint_set3  = 0;
@@ -166,21 +165,21 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
         max_frame_num = X264_MAX( max_frame_num, time_to_recovery+1 );
     }
 
-    sps->i_log2_max_frame_num = 4;
+    sps->i_log2_max_frame_num = 8;
     while( (1 << sps->i_log2_max_frame_num) <= max_frame_num )
         sps->i_log2_max_frame_num++;
 
-    sps->i_poc_type = param->i_bframe || param->b_interlaced || param->i_avcintra_class ? 0 : 2;
+    //sps->i_poc_type = param->i_bframe || param->b_interlaced || param->i_avcintra_class ? 0 : 2;
+    sps->i_poc_type = 0;
     if( sps->i_poc_type == 0 )
     {
         int max_delta_poc = (param->i_bframe + 2) * (!!param->i_bframe_pyramid + 1) * 2;
-        sps->i_log2_max_poc_lsb = 4;
+        sps->i_log2_max_poc_lsb = 8;
         while( (1 << sps->i_log2_max_poc_lsb) <= max_delta_poc * 2 )
             sps->i_log2_max_poc_lsb++;
     }
 
-    sps->b_vui = 1;
-
+    sps->b_vui = 0;
     sps->b_gaps_in_frame_num_value_allowed = 0;
     sps->b_mb_adaptive_frame_field = param->b_interlaced;
     sps->b_direct8x8_inference = 1;
@@ -230,11 +229,10 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->vui.b_pic_struct_present = param->b_pic_struct;
 
     // NOTE: HRD related parts of the SPS are initialised in x264_ratecontrol_init_reconfigurable
-
     sps->vui.b_bitstream_restriction = !(sps->b_constraint_set3 && sps->i_profile_idc >= PROFILE_HIGH);
     if( sps->vui.b_bitstream_restriction )
     {
-        sps->vui.b_motion_vectors_over_pic_boundaries = 1;
+        sps->vui.b_motion_vectors_over_pic_boundaries = 0;
         sps->vui.i_max_bytes_per_pic_denom = 0;
         sps->vui.i_max_bits_per_mb_denom = 0;
         sps->vui.i_log2_max_mv_length_horizontal =
@@ -316,7 +314,7 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
     bs_write( s, 8, sps->i_level_idc );
 
     bs_write_ue( s, sps->i_id );
-
+   
     if( sps->i_profile_idc >= PROFILE_HIGH )
     {
         bs_write_ue( s, sps->i_chroma_format_idc );
@@ -370,9 +368,8 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
         bs_write_ue( s, sps->crop.i_top    >> v_shift );
         bs_write_ue( s, sps->crop.i_bottom >> v_shift );
     }
-
     bs_write1( s, sps->b_vui );
-    if( sps->b_vui )
+    if(sps->b_vui)
     {
         bs_write1( s, sps->vui.b_aspect_ratio_info_present );
         if( sps->vui.b_aspect_ratio_info_present )
@@ -493,9 +490,8 @@ void x264_pps_init( x264_pps_t *pps, int i_id, x264_param_t *param, x264_sps_t *
 
     pps->i_pic_init_qp = param->rc.i_rc_method == X264_RC_ABR || param->b_stitchable ? 26 + QP_BD_OFFSET : SPEC_QP( param->rc.i_qp_constant );
     pps->i_pic_init_qs = 26 + QP_BD_OFFSET;
-
     pps->i_chroma_qp_index_offset = param->analyse.i_chroma_qp_offset;
-    pps->b_deblocking_filter_control = 1;
+    pps->b_deblocking_filter_control = 0;
     pps->b_constrained_intra_pred = param->b_constrained_intra;
     pps->b_redundant_pic_cnt = 0;
 
@@ -608,7 +604,7 @@ int x264_sei_version_write( x264_t *h, bs_t *s )
 
     memcpy( payload, uuid, 16 );
     sprintf( payload+16, "x264 - core %d%s - H.264/MPEG-4 AVC codec - "
-             "Copy%s 2003-2023 - http://www.videolan.org/x264.html - options: %s",
+             "Copy%s 2003-2025 - http://www.videolan.org/x264.html - options: %s",
              X264_BUILD, X264_VERSION, HAVE_GPL?"left":"right", opts );
     length = strlen(payload)+1;
 

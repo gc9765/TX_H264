@@ -1,7 +1,7 @@
 /*****************************************************************************
  * macroblock.c: macroblock common functions
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Fiona Glaser <fiona@x264.com>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -1335,7 +1335,7 @@ static ALWAYS_INLINE void macroblock_cache_load( x264_t *h, int mb_x, int mb_y, 
     }
 
     if( h->sh.i_type == SLICE_TYPE_P )
-        x264_mb_predict_mv_pskip( h, h->mb.cache.pskip_mv );
+            x264_mb_predict_mv_pskip( h, h->mb.cache.pskip_mv );
 
     h->mb.i_neighbour4[0] =
     h->mb.i_neighbour8[0] = (h->mb.i_neighbour_intra & (MB_TOP|MB_LEFT|MB_TOPLEFT))

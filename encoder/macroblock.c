@@ -1,7 +1,7 @@
 /*****************************************************************************
  * macroblock.c: macroblock encoding
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -660,7 +660,6 @@ static ALWAYS_INLINE void macroblock_encode_internal( x264_t *h, int plane_count
                                   h->mb.mv_min[0], h->mb.mv_max[0] );
             int mvy = x264_clip3( h->mb.cache.mv[0][x264_scan8[0]][1],
                                   h->mb.mv_min[1], h->mb.mv_max[1] );
-
             for( int p = 0; p < plane_count; p++ )
                 h->mc.mc_luma( h->mb.pic.p_fdec[p], FDEC_STRIDE,
                                &h->mb.pic.p_fref[0][0][p*4], h->mb.pic.i_stride[p],
@@ -1000,7 +999,6 @@ static ALWAYS_INLINE int macroblock_probe_skip_internal( x264_t *h, int b_bidir,
             /* Get the MV */
             mvp[0] = x264_clip3( h->mb.cache.pskip_mv[0], h->mb.mv_min[0], h->mb.mv_max[0] );
             mvp[1] = x264_clip3( h->mb.cache.pskip_mv[1], h->mb.mv_min[1], h->mb.mv_max[1] );
-
             /* Motion compensation */
             h->mc.mc_luma( h->mb.pic.p_fdec[p],    FDEC_STRIDE,
                            &h->mb.pic.p_fref[0][0][p*4], h->mb.pic.i_stride[p],
@@ -1042,9 +1040,10 @@ static ALWAYS_INLINE int macroblock_probe_skip_internal( x264_t *h, int b_bidir,
         {
             /* Special case for mv0, which is (of course) very common in P-skip mode. */
             if( M32( mvp ) )
-                h->mc.mc_chroma( h->mb.pic.p_fdec[1], h->mb.pic.p_fdec[2], FDEC_STRIDE,
+                {h->mc.mc_chroma( h->mb.pic.p_fdec[1], h->mb.pic.p_fdec[2], FDEC_STRIDE,
                                  h->mb.pic.p_fref[0][0][4], h->mb.pic.i_stride[1],
                                  mvp[0], mvp[1] * (1<<chroma422), 8, chroma422?16:8 );
+                }
             else
                 h->mc.load_deinterleave_chroma_fdec( h->mb.pic.p_fdec[1], h->mb.pic.p_fref[0][0][4],
                                                      h->mb.pic.i_stride[1], chroma422?16:8 );

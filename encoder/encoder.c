@@ -1,7 +1,7 @@
 /*****************************************************************************
  * encoder.c: top-level encoder functions
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Loren Merritt <lorenm@u.washington.edu>
@@ -222,7 +222,7 @@ static void slice_header_write( bs_t *s, x264_slice_header_t *sh, int i_nal_ref_
     else
         bs_write_ue( s, sh->i_first_mb );
 
-    bs_write_ue( s, sh->i_type + 5 );   /* same type things */
+    bs_write_ue( s, sh->i_type );   /* same type things */
     bs_write_ue( s, sh->i_pps_id );
     bs_write( s, sh->sps->i_log2_max_frame_num, sh->i_frame_num & ((1<<sh->sps->i_log2_max_frame_num)-1) );
 
@@ -583,6 +583,7 @@ static int validate_parameters( x264_t *h, int b_open )
         h->param.i_lookahead_threads = 1;
     }
     h->i_thread_frames = h->param.b_sliced_threads ? 1 : h->param.i_threads;
+
     if( h->i_thread_frames > 1 )
         h->param.nalu_process = NULL;
 
@@ -1149,8 +1150,7 @@ static int validate_parameters( x264_t *h, int b_open )
     h->param.analyse.i_luma_deadzone[1] = x264_clip3( h->param.analyse.i_luma_deadzone[1], 0, 32 );
 
     h->param.i_cabac_init_idc = x264_clip3( h->param.i_cabac_init_idc, 0, 2 );
-
-    if( h->param.i_cqm_preset < X264_CQM_FLAT || h->param.i_cqm_preset > X264_CQM_CUSTOM )
+        if( h->param.i_cqm_preset < X264_CQM_FLAT || h->param.i_cqm_preset > X264_CQM_CUSTOM )
         h->param.i_cqm_preset = X264_CQM_FLAT;
 
     if( h->param.analyse.i_me_method < X264_ME_DIA ||
@@ -1251,7 +1251,7 @@ static int validate_parameters( x264_t *h, int b_open )
             do h->param.i_level_idc = l->level_idc;
                 while( l[1].level_idc && x264_validate_levels( h, 0 ) && l++ );
             h->param.rc.i_vbv_max_bitrate = maxrate_bak;
-        }
+  	}
         else
         {
             while( l->level_idc && l->level_idc != h->param.i_level_idc )
@@ -2113,14 +2113,15 @@ int x264_encoder_headers( x264_t *h, x264_nal_t **pp_nal, int *pi_nal )
     x264_pps_write( &h->out.bs, h->sps, h->pps );
     if( nal_end( h ) )
         return -1;
-
+        
     /* identify ourselves */
+   if(0){
     nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
     if( x264_sei_version_write( h, &h->out.bs ) )
         return -1;
     if( nal_end( h ) )
         return -1;
-
+   } 
     frame_size = encoder_encapsulate_nals( h, 0 );
     if( frame_size < 0 )
         return -1;
@@ -2787,7 +2788,7 @@ static intptr_t slice_write( x264_t *h )
     h->sh.i_qp = x264_ratecontrol_mb_qp( h );
     h->sh.i_qp = SPEC_QP( h->sh.i_qp );
     h->sh.i_qp_delta = h->sh.i_qp - h->pps->i_pic_init_qp;
-
+    
     slice_header_write( &h->out.bs, &h->sh, h->i_nal_ref_idc );
     if( h->param.b_cabac )
     {
@@ -2855,11 +2856,21 @@ static intptr_t slice_write( x264_t *h )
         /* load cache */
         if( SLICE_MBAFF )
             x264_macroblock_cache_load_interlaced( h, i_mb_x, i_mb_y );
-        else
+        else //cache load
             x264_macroblock_cache_load_progressive( h, i_mb_x, i_mb_y );
 
         x264_macroblock_analyse( h );
-
+        if(( h->sh.i_type == SLICE_TYPE_P )&&(IS_SKIP( h->mb.i_type )))
+        { 
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)      h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                          h->mb.cache.pskip_mv[0] = x264_clip3(h->mb.cache.pskip_mv[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)      h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            // if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                          h->mb.cache.pskip_mv[1] = x264_clip3(h->mb.cache.pskip_mv[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
+            if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4 +16) > h->param.i_width)         printf("11mbx%d=%d\r\n",h->mb.i_mb_x,h->mb.cache.pskip_mv[0]);
+            if(((h->mb.i_mb_x*16)+ h->mb.cache.pskip_mv[0]/4) <0)                             printf("11mbx%d=%d\r\n",h->mb.i_mb_x,h->mb.cache.pskip_mv[0]);
+            if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4+16) > h->param.i_height)         printf("11mby%d=%d\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1]);
+            if(((h->mb.i_mb_y*16)+ h->mb.cache.pskip_mv[1]/4) <0)                             printf("11mby%d=%d\r\n",h->mb.i_mb_y,h->mb.cache.pskip_mv[1]);
+        }
         /* encode this macroblock -> be careful it can change the mb type to P_SKIP if needed */
 reencode:
         x264_macroblock_encode( h );
@@ -3507,7 +3518,7 @@ int     x264_encoder_encode( x264_t *h,
     }
     h->sh.i_mmco_command_count =
     h->sh.i_mmco_remove_from_end = 0;
-    h->b_ref_reorder[0] =
+    h->b_ref_reorder[0] = 1;
     h->b_ref_reorder[1] = 0;
     h->fdec->i_poc =
     h->fenc->i_poc = 2 * ( h->fenc->i_frame - X264_MAX( h->frames.i_last_idr, 0 ) );
@@ -3658,10 +3669,10 @@ int     x264_encoder_encode( x264_t *h,
             }
         }
     }
-
+    
     if( h->fenc->b_keyframe )
     {
-        /* Write SPS and PPS */
+	/* Write SPS and PPS */
         if( h->param.b_repeat_headers )
         {
             /* generate sequence parameters */
@@ -3673,7 +3684,7 @@ int     x264_encoder_encode( x264_t *h,
             if( h->param.i_avcintra_class )
                 h->out.nal[h->out.i_nal-1].i_padding = 256 - bs_pos( &h->out.bs ) / 8 - 2*NALU_OVERHEAD;
             overhead += h->out.nal[h->out.i_nal-1].i_payload + h->out.nal[h->out.i_nal-1].i_padding + NALU_OVERHEAD;
-
+           
             /* generate picture parameters */
             nal_start( h, NAL_PPS, NAL_PRIORITY_HIGHEST );
             x264_pps_write( &h->out.bs, h->sps, h->pps );
@@ -3717,7 +3728,7 @@ int     x264_encoder_encode( x264_t *h,
             h->fenc->extra_sei.payloads[i].payload = NULL;
         }
     }
-
+    
     if( h->fenc->extra_sei.sei_free )
     {
         h->fenc->extra_sei.sei_free( h->fenc->extra_sei.payloads );
@@ -3726,12 +3737,12 @@ int     x264_encoder_encode( x264_t *h,
     }
 
     if( h->fenc->b_keyframe )
-    {
+    {    if(0){
         /* Avid's decoder strictly wants two SEIs for AVC-Intra so we can't insert the x264 SEI */
         if( h->param.b_repeat_headers && h->fenc->i_frame == 0 && !h->param.i_avcintra_class )
         {
             /* identify ourself */
-            nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
+	    nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
             if( x264_sei_version_write( h, &h->out.bs ) )
                 return -1;
             if( nal_end( h ) )
@@ -3740,7 +3751,7 @@ int     x264_encoder_encode( x264_t *h,
         }
 
         if( h->fenc->i_type != X264_TYPE_IDR )
-        {
+        { 
             int time_to_recovery = h->param.b_open_gop ? 0 : X264_MIN( h->mb.i_mb_width - 1, h->param.i_keyint_max ) + h->param.i_bframe - 1;
             nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
             x264_sei_recovery_point_write( h, &h->out.bs, time_to_recovery );
@@ -3774,9 +3785,9 @@ int     x264_encoder_encode( x264_t *h,
             if( nal_end( h ) )
                 return -1;
             overhead += h->out.nal[h->out.i_nal-1].i_payload + SEI_OVERHEAD;
-        }
+        }}
     }
-
+    
     if( h->param.i_frame_packing >= 0 && (h->fenc->b_keyframe || h->param.i_frame_packing == 5) )
     {
         nal_start( h, NAL_SEI, NAL_PRIORITY_DISPOSABLE );
@@ -3785,7 +3796,7 @@ int     x264_encoder_encode( x264_t *h,
             return -1;
         overhead += h->out.nal[h->out.i_nal-1].i_payload + SEI_OVERHEAD;
     }
-
+   
     /* generate sei pic timing */
     if( h->sps->vui.b_pic_struct_present || h->sps->vui.b_nal_hrd_parameters_present )
     {
@@ -3847,7 +3858,6 @@ int     x264_encoder_encode( x264_t *h,
             return -1;
         if( nal_end( h ) )
             return -1;
-
         h->out.nal[h->out.i_nal-1].i_padding = total_len - h->out.nal[h->out.i_nal-1].i_payload - SEI_OVERHEAD;
         overhead += h->out.nal[h->out.i_nal-1].i_payload + h->out.nal[h->out.i_nal-1].i_padding + SEI_OVERHEAD;
     }

@@ -1,7 +1,7 @@
 /*****************************************************************************
  * cpu.c: cpu detection
  *****************************************************************************
- * Copyright (C) 2003-2023 x264 project
+ * Copyright (C) 2003-2025 x264 project
  *
  * Authors: Loren Merritt <lorenm@u.washington.edu>
  *          Laurent Aimar <fenrir@via.ecp.fr>
@@ -27,20 +27,19 @@
 
 #include "base.h"
 
-#if SYS_CYGWIN || SYS_SunOS || SYS_OPENBSD
+#if HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO
+#include <sys/auxv.h>
+#endif
+#if HAVE_SYSCONF
 #include <unistd.h>
 #endif
 #if SYS_LINUX
-#ifdef __ANDROID__
-#include <unistd.h>
-#else
 #include <sched.h>
-#endif
 #endif
 #if SYS_BEOS
 #include <kernel/OS.h>
 #endif
-#if SYS_MACOSX || SYS_OPENBSD || SYS_FREEBSD
+#if SYS_MACOSX || SYS_FREEBSD || SYS_NETBSD || SYS_OPENBSD
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
@@ -96,13 +95,31 @@ const x264_cpu_name_t x264_cpu_names[] =
 #elif ARCH_AARCH64
     {"ARMv8",           X264_CPU_ARMV8},
     {"NEON",            X264_CPU_NEON},
+    {"SVE",             X264_CPU_SVE},
+    {"SVE2",            X264_CPU_SVE2},
 #elif ARCH_MIPS
     {"MSA",             X264_CPU_MSA},
+#elif ARCH_LOONGARCH
+    {"LSX",             X264_CPU_LSX},
+    {"LASX",            X264_CPU_LASX},
 #endif
     {"", 0},
 };
 
-#if (HAVE_ALTIVEC && SYS_LINUX) || (HAVE_ARMV6 && !HAVE_NEON)
+static unsigned long x264_getauxval( unsigned long type )
+{
+#if HAVE_GETAUXVAL
+    return getauxval( type );
+#elif HAVE_ELF_AUX_INFO
+    unsigned long aux = 0;
+    elf_aux_info( type, &aux, sizeof(aux) );
+    return aux;
+#else
+    return 0;
+#endif
+}
+
+#if ((HAVE_ALTIVEC && SYS_LINUX) || (HAVE_ARMV6 && !HAVE_NEON)) && !(HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO)
 #include <signal.h>
 #include <setjmp.h>
 static sigjmp_buf jmpbuf;
@@ -305,7 +322,23 @@ uint32_t x264_cpu_detect( void )
 
 #elif HAVE_ALTIVEC
 
-#if SYS_MACOSX || SYS_OPENBSD || SYS_FREEBSD
+#if HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO
+
+#define HWCAP_PPC_ALTIVEC   (1U << 28)
+
+uint32_t x264_cpu_detect( void )
+{
+    uint32_t flags = 0;
+
+    unsigned long hwcap = x264_getauxval( AT_HWCAP );
+
+    if ( hwcap & HWCAP_PPC_ALTIVEC )
+        flags |= X264_CPU_ALTIVEC;
+
+    return flags;
+}
+
+#elif SYS_MACOSX || SYS_FREEBSD || SYS_NETBSD || SYS_OPENBSD
 
 uint32_t x264_cpu_detect( void )
 {
@@ -320,6 +353,8 @@ uint32_t x264_cpu_detect( void )
     size_t   length = sizeof( has_altivec );
 #if SYS_MACOSX || SYS_OPENBSD
     int      error = sysctl( selectors, 2, &has_altivec, &length, NULL, 0 );
+#elif SYS_NETBSD
+    int      error = sysctlbyname( "machdep.altivec", &has_altivec, &length, NULL, 0 );
 #else
     int      error = sysctlbyname( "hw.altivec", &has_altivec, &length, NULL, 0 );
 #endif
@@ -373,11 +408,19 @@ uint32_t x264_cpu_detect( void )
 void x264_cpu_neon_test( void );
 int x264_cpu_fast_neon_mrc_test( void );
 
+#define HWCAP_ARM_NEON   (1U << 12)
+
 uint32_t x264_cpu_detect( void )
 {
     uint32_t flags = 0;
     flags |= X264_CPU_ARMV6;
 
+#if HAVE_GETAUXVAL || HAVE_ELF_AUX_INFO
+    unsigned long hwcap = x264_getauxval( AT_HWCAP );
+
+    if ( hwcap & HWCAP_ARM_NEON )
+        flags |= X264_CPU_NEON;
+#else
     // don't do this hack if compiled with -mfpu=neon
 #if !HAVE_NEON
     static void (* oldsig)( int );
@@ -395,6 +438,7 @@ uint32_t x264_cpu_detect( void )
 #endif
 
     flags |= X264_CPU_NEON;
+#endif
 
     // fast neon -> arm (Cortex-A9) detection relies on user access to the
     // cycle counter; this assumes ARMv7 performance counters.
@@ -413,13 +457,49 @@ uint32_t x264_cpu_detect( void )
 
 #elif HAVE_AARCH64
 
+#if defined(__linux__) || HAVE_ELF_AUX_INFO
+
+#define HWCAP_AARCH64_SVE   (1U << 22)
+#define HWCAP2_AARCH64_SVE2 (1U << 1)
+
+static uint32_t detect_flags( void )
+{
+    uint32_t flags = 0;
+
+    unsigned long hwcap = x264_getauxval( AT_HWCAP );
+    unsigned long hwcap2 = x264_getauxval( AT_HWCAP2 );
+
+    if ( hwcap & HWCAP_AARCH64_SVE )
+        flags |= X264_CPU_SVE;
+    if ( hwcap2 & HWCAP2_AARCH64_SVE2 )
+        flags |= X264_CPU_SVE2;
+
+    return flags;
+}
+#endif
+
 uint32_t x264_cpu_detect( void )
 {
+    uint32_t flags = X264_CPU_ARMV8;
 #if HAVE_NEON
-    return X264_CPU_ARMV8 | X264_CPU_NEON;
-#else
-    return X264_CPU_ARMV8;
+    flags |= X264_CPU_NEON;
 #endif
+
+    // If these features are enabled unconditionally in the compiler, we can
+    // assume that they are available.
+#ifdef __ARM_FEATURE_SVE
+    flags |= X264_CPU_SVE;
+#endif
+#ifdef __ARM_FEATURE_SVE2
+    flags |= X264_CPU_SVE2;
+#endif
+
+    // Where possible, try to do runtime detection as well.
+#if defined(__linux__) || HAVE_ELF_AUX_INFO
+    flags |= detect_flags();
+#endif
+
+    return flags;
 }
 
 #elif HAVE_MSA
@@ -427,6 +507,24 @@ uint32_t x264_cpu_detect( void )
 uint32_t x264_cpu_detect( void )
 {
     return X264_CPU_MSA;
+}
+
+#elif HAVE_LSX
+
+#define LA_HWCAP_LSX    ( 1U << 4 )
+#define LA_HWCAP_LASX   ( 1U << 5 )
+
+uint32_t x264_cpu_detect( void )
+{
+    uint32_t flags = 0;
+    uint32_t hwcap = (uint32_t)x264_getauxval( AT_HWCAP );
+
+    if( hwcap & LA_HWCAP_LSX )
+        flags |= X264_CPU_LSX;
+    if( hwcap & LA_HWCAP_LASX )
+        flags |= X264_CPU_LASX;
+
+    return flags;
 }
 
 #else
@@ -446,14 +544,7 @@ int x264_cpu_num_processors( void )
 #elif SYS_WINDOWS
     return x264_pthread_num_processors_np();
 
-#elif SYS_CYGWIN || SYS_SunOS || SYS_OPENBSD
-    return sysconf( _SC_NPROCESSORS_ONLN );
-
 #elif SYS_LINUX
-#ifdef __ANDROID__
-    // Android NDK does not expose sched_getaffinity
-    return sysconf( _SC_NPROCESSORS_CONF );
-#else
     cpu_set_t p_aff;
     memset( &p_aff, 0, sizeof(p_aff) );
     if( sched_getaffinity( 0, sizeof(p_aff), &p_aff ) )
@@ -466,21 +557,26 @@ int x264_cpu_num_processors( void )
         np += (((uint8_t *)&p_aff)[bit / 8] >> (bit % 8)) & 1;
     return np;
 #endif
-#endif
 
 #elif SYS_BEOS
     system_info info;
     get_system_info( &info );
     return info.cpu_count;
 
-#elif SYS_MACOSX || SYS_FREEBSD
+#elif SYS_MACOSX
     int ncpu;
     size_t length = sizeof( ncpu );
-    if( sysctlbyname("hw.ncpu", &ncpu, &length, NULL, 0) )
+    if( sysctlbyname("hw.logicalcpu", &ncpu, &length, NULL, 0) )
     {
         ncpu = 1;
     }
     return ncpu;
+
+#elif defined(_SC_NPROCESSORS_ONLN)
+    return sysconf( _SC_NPROCESSORS_ONLN );
+
+#elif defined(_SC_NPROCESSORS_CONF)
+    return sysconf( _SC_NPROCESSORS_CONF );
 
 #else
     return 1;
