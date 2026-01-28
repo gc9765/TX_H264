@@ -101,6 +101,7 @@ void x264_sei_write( bs_t *s, uint8_t *payload, int payload_size, int payload_ty
 void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
 {
     int csp = param->i_csp & X264_CSP_MASK;
+
     sps->i_id = i_id;
     sps->i_mb_width = ( param->i_width + 15 ) / 16;
     sps->i_mb_height= ( param->i_height + 15 ) / 16;
@@ -229,6 +230,7 @@ void x264_sps_init( x264_sps_t *sps, int i_id, x264_param_t *param )
     sps->vui.b_pic_struct_present = param->b_pic_struct;
 
     // NOTE: HRD related parts of the SPS are initialised in x264_ratecontrol_init_reconfigurable
+
     sps->vui.b_bitstream_restriction = !(sps->b_constraint_set3 && sps->i_profile_idc >= PROFILE_HIGH);
     if( sps->vui.b_bitstream_restriction )
     {
@@ -314,7 +316,7 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
     bs_write( s, 8, sps->i_level_idc );
 
     bs_write_ue( s, sps->i_id );
-   
+
     if( sps->i_profile_idc >= PROFILE_HIGH )
     {
         bs_write_ue( s, sps->i_chroma_format_idc );
@@ -368,8 +370,9 @@ void x264_sps_write( bs_t *s, x264_sps_t *sps )
         bs_write_ue( s, sps->crop.i_top    >> v_shift );
         bs_write_ue( s, sps->crop.i_bottom >> v_shift );
     }
+
     bs_write1( s, sps->b_vui );
-    if(sps->b_vui)
+    if( sps->b_vui )
     {
         bs_write1( s, sps->vui.b_aspect_ratio_info_present );
         if( sps->vui.b_aspect_ratio_info_present )
@@ -490,6 +493,7 @@ void x264_pps_init( x264_pps_t *pps, int i_id, x264_param_t *param, x264_sps_t *
 
     pps->i_pic_init_qp = param->rc.i_rc_method == X264_RC_ABR || param->b_stitchable ? 26 + QP_BD_OFFSET : SPEC_QP( param->rc.i_qp_constant );
     pps->i_pic_init_qs = 26 + QP_BD_OFFSET;
+
     pps->i_chroma_qp_index_offset = param->analyse.i_chroma_qp_offset;
     pps->b_deblocking_filter_control = 0;
     pps->b_constrained_intra_pred = param->b_constrained_intra;

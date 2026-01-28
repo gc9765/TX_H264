@@ -649,6 +649,12 @@ static ALWAYS_INLINE void macroblock_encode_internal( x264_t *h, int plane_count
             else if( h->mb.i_type == B_SKIP )
                 h->mb.i_type = B_DIRECT;
         }
+    } else {
+        if( h->mb.i_type == P_SKIP && !check_pskip_mv_bounds(h))
+        {
+            b_force_no_skip = 1;
+            h->mb.i_type = P_L0;
+        }
     }
 
     if( h->mb.i_type == P_SKIP )
@@ -660,6 +666,7 @@ static ALWAYS_INLINE void macroblock_encode_internal( x264_t *h, int plane_count
                                   h->mb.mv_min[0], h->mb.mv_max[0] );
             int mvy = x264_clip3( h->mb.cache.mv[0][x264_scan8[0]][1],
                                   h->mb.mv_min[1], h->mb.mv_max[1] );
+
             for( int p = 0; p < plane_count; p++ )
                 h->mc.mc_luma( h->mb.pic.p_fdec[p], FDEC_STRIDE,
                                &h->mb.pic.p_fref[0][0][p*4], h->mb.pic.i_stride[p],
@@ -999,6 +1006,7 @@ static ALWAYS_INLINE int macroblock_probe_skip_internal( x264_t *h, int b_bidir,
             /* Get the MV */
             mvp[0] = x264_clip3( h->mb.cache.pskip_mv[0], h->mb.mv_min[0], h->mb.mv_max[0] );
             mvp[1] = x264_clip3( h->mb.cache.pskip_mv[1], h->mb.mv_min[1], h->mb.mv_max[1] );
+
             /* Motion compensation */
             h->mc.mc_luma( h->mb.pic.p_fdec[p],    FDEC_STRIDE,
                            &h->mb.pic.p_fref[0][0][p*4], h->mb.pic.i_stride[p],
@@ -1040,10 +1048,9 @@ static ALWAYS_INLINE int macroblock_probe_skip_internal( x264_t *h, int b_bidir,
         {
             /* Special case for mv0, which is (of course) very common in P-skip mode. */
             if( M32( mvp ) )
-                {h->mc.mc_chroma( h->mb.pic.p_fdec[1], h->mb.pic.p_fdec[2], FDEC_STRIDE,
+                h->mc.mc_chroma( h->mb.pic.p_fdec[1], h->mb.pic.p_fdec[2], FDEC_STRIDE,
                                  h->mb.pic.p_fref[0][0][4], h->mb.pic.i_stride[1],
                                  mvp[0], mvp[1] * (1<<chroma422), 8, chroma422?16:8 );
-                }
             else
                 h->mc.load_deinterleave_chroma_fdec( h->mb.pic.p_fdec[1], h->mb.pic.p_fref[0][0][4],
                                                      h->mb.pic.i_stride[1], chroma422?16:8 );

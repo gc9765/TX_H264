@@ -193,30 +193,14 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
     pixel *p_fref_w = m->p_fref_w;
     ALIGNED_ARRAY_32( pixel, pix,[16*16] );
     ALIGNED_ARRAY_8( int16_t, mvc_temp,[16],[2] );
-    int i_fmv_range = 4 * h->param.analyse.i_mv_range;
-    int i_fpel_border = 8;
+
     ALIGNED_ARRAY_16( int, costs,[16] );
-    /* Calculate max allowed MV range */
-    h->mb.mv_min[0] = 4*( -16*h->mb.i_mb_x );
-    h->mb.mv_max[0] = 4*( 16*( h->mb.i_mb_width - h->mb.i_mb_x - 1 ) );
-    h->mb.mv_min_spel[0] = X264_MAX( h->mb.mv_min[0], -i_fmv_range );
-    h->mb.mv_max_spel[0] = X264_MIN( h->mb.mv_max[0], i_fmv_range-1*4 );
-    h->mb.mv_limit_fpel[0][0] = (h->mb.mv_min_spel[0]>>2);
-    h->mb.mv_limit_fpel[1][0] = (h->mb.mv_max_spel[0]>>2);
-    h->mb.mv_min[1] = 4*( -16*h->mb.i_mb_y);
-    h->mb.mv_max[1] = 4*( 16*( h->mb.i_mb_height - h->mb.i_mb_y - 1 ));
-    h->mb.mv_min_spel[1] = X264_MAX( h->mb.mv_min[1], (-i_fmv_range+4*i_fpel_border) );
-    h->mb.mv_max_spel[1] = X264_MIN3( h->mb.mv_max[1], (i_fmv_range-4*(i_fpel_border+1)), 4*i_fmv_range );
-    h->mb.mv_limit_fpel[0][1] = (h->mb.mv_min_spel[1]>>2);
-    h->mb.mv_limit_fpel[1][1] = (h->mb.mv_max_spel[1]>>2);
 
     int mv_x_min = h->mb.mv_limit_fpel[0][0];
     int mv_y_min = h->mb.mv_limit_fpel[0][1];
     int mv_x_max = h->mb.mv_limit_fpel[1][0];
     int mv_y_max = h->mb.mv_limit_fpel[1][1];
-    // if(h->mb.i_mb_x == h->mb.i_mb_width-1)  printf("1mb_x=%d,mb_width=%d,mv_x_maxF=%d, mv_x_maxS=%d\r\n",h->mb.i_mb_x,h->mb.i_mb_width, h->mb.mv_limit_fpel[1][0],h->mb.mv_max_spel[0]);
-    // if(h->mb.i_mb_y == h->mb.i_mb_height-1) printf("1mb_y=%d,mb_height=%d,mv_y_maxF=%d,mv_y_maxS=%d\r\n",h->mb.i_mb_y,h->mb.i_mb_height,h->mb.mv_limit_fpel[1][1],h->mb.mv_max_spel[1]);
-    /* Special version of pack to allow shortcuts in CHECK_MVRANGE */
+/* Special version of pack to allow shortcuts in CHECK_MVRANGE */
 #define pack16to32_mask2(mx,my) (((uint32_t)(mx)<<16)|((uint32_t)(my)&0x7FFF))
     uint32_t mv_min = pack16to32_mask2( -mv_x_min, -mv_y_min );
     uint32_t mv_max = pack16to32_mask2( mv_x_max, mv_y_max )|0x8000;
@@ -294,8 +278,6 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         /* Calculate and check the fullpel MVP first */
         bmx = pmx = x264_clip3( FPEL(m->mvp[0]), mv_x_min, mv_x_max );
         bmy = pmy = x264_clip3( FPEL(m->mvp[1]), mv_y_min, mv_y_max );
-        if(((h->mb.i_mb_x*16)+ bmx +16) > h->param.i_width)       printf("0mbx%d=%d; %d,%d,%d,%d* ",h->mb.i_mb_x,bmx,h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-        if(((h->mb.i_mb_y*16)+ bmy +16) > h->param.i_height)      printf("0mby%d=%d; %d,%d,%d,%d*\r\n",h->mb.i_mb_y,bmy,h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
         pmv = pack16to32_mask( bmx, bmy );
 
         /* Because we are rounding the predicted motion vector to fullpel, there will be
@@ -329,6 +311,7 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
                 bcost >>= 4;
             }
         }
+
         /* Same as above, except the condition is simpler. */
         if( pmv )
             COST_MV( 0, 0 );
@@ -788,6 +771,10 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         break;
     }
 
+    // clamp to allowed subpel MV range to satisfy multithread bounds
+    bmx = x264_clip3( bmx, h->mb.mv_min_spel[0]>>2, h->mb.mv_max_spel[0]>>2 );
+    bmy = x264_clip3( bmy, h->mb.mv_min_spel[1]>>2, h->mb.mv_max_spel[1]>>2 );
+
     /* -> qpel mv */
     uint32_t bmv = pack16to32_mask(bmx,bmy);
     uint32_t bmv_spel = SPELx2(bmv);
@@ -798,10 +785,6 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
         /* compute the real cost */
         if( bmv == pmv ) m->cost += m->cost_mv;
         M32( m->mv ) = bmv_spel;
-        m->mv[0] = x264_clip3( m->mv[0], SPEL(mv_x_min), SPEL(mv_x_max) );
-        m->mv[1] = x264_clip3( m->mv[1], SPEL(mv_y_min), SPEL(mv_y_max) );
-        if(((h->mb.i_mb_x*16)+ m->mv[0]/4 +16) > h->param.i_width)       printf("8mbx%d=%d; %d,%d,%d,%d*    ",h->mb.i_mb_x,m->mv[0],h->mb.mv_min[0],h->mb.mv_max[0],h->mb.mv_min_spel[0],h->mb.mv_max_spel[0]);
-        if(((h->mb.i_mb_y*16)+ m->mv[1]/4 +16) > h->param.i_height)      printf("8mby%d=%d; %d,%d,%d,%d*\r\n",h->mb.i_mb_y,m->mv[1],h->mb.mv_min[1],h->mb.mv_max[1],h->mb.mv_min_spel[1],h->mb.mv_max_spel[1]);
     }
     else
     {
@@ -810,7 +793,7 @@ void x264_me_search_ref( x264_t *h, x264_me_t *m, int16_t (*mvc)[2], int i_mvc, 
     }
 
     /* subpel refine */
-    if( h->mb.i_subpel_refine >= 2 )
+    if(h->mb.i_subpel_refine >= 2)
     {
         int hpel = subpel_iterations[h->mb.i_subpel_refine][2];
         int qpel = subpel_iterations[h->mb.i_subpel_refine][3];
@@ -1007,6 +990,8 @@ static void refine_subpel( x264_t *h, x264_me_t *m, int hpel_iters, int qpel_ite
     }
 
     m->cost = bcost;
+    bmx = x264_clip3( bmx, h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    bmy = x264_clip3( bmy, h->mb.mv_min_spel[1], h->mb.mv_max_spel[1] ) & 0xFFFC;
     m->mv[0] = bmx;
     m->mv[1] = bmy;
     m->cost_mv = p_cost_mvx[bmx] + p_cost_mvy[bmy];
@@ -1367,6 +1352,9 @@ void x264_me_refine_qpel_rd( x264_t *h, x264_me_t *m, int i_lambda2, int i4, int
     }
 
     m->cost = bcost;
+    bmx = x264_clip3( bmx, h->mb.mv_min_spel[0], h->mb.mv_max_spel[0] );
+    bmy = x264_clip3( bmy, h->mb.mv_min_spel[1], h->mb.mv_max_spel[1] ) & 0xFFFC;
+    m->cost_mv = p_cost_mvx[bmx] + p_cost_mvy[bmy];
     m->mv[0] = bmx;
     m->mv[1] = bmy;
     x264_macroblock_cache_mv ( h, block_idx_x[i4], block_idx_y[i4], bw>>2, bh>>2, i_list, pack16to32_mask(bmx, bmy) );

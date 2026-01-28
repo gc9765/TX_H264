@@ -212,4 +212,24 @@ static ALWAYS_INLINE void x264_mb_encode_i8x8( x264_t *h, int p, int idx, int i_
         STORE_8x8_NNZ( p, idx, 0 );
 }
 
+static ALWAYS_INLINE int check_pskip_mv_bounds( x264_t *h )
+{
+    /* Clip motion vector to valid range */
+    int mv_x = x264_clip3( h->mb.cache.pskip_mv[0], h->mb.mv_min[0], h->mb.mv_max[0] );
+    int mv_y = x264_clip3( h->mb.cache.pskip_mv[1], h->mb.mv_min[1], h->mb.mv_max[1] );
+    
+
+    /* Convert motion vector to absolute frame coordinates */
+    const int MB_SIZE = 16;
+    int frame_x = (h->mb.i_mb_x * MB_SIZE) + (mv_x >> 2); 
+    int frame_y = (h->mb.i_mb_y * MB_SIZE) + (mv_y >> 2);
+
+    /* Check if reference area is within frame bounds */
+    int in_bound = (frame_x >= 0) && ((frame_x + MB_SIZE) <= h->param.i_width) &&
+        (frame_y >= 0) && ((frame_y + MB_SIZE) <= h->param.i_height);
+    
+    // x264_log(h, X264_LOG_INFO, "P_SKIP MB[%d, %d]: inbound = %d\n\r",h->mb.i_mb_x,h->mb.i_mb_y,in_bound);
+    return in_bound;
+}
+
 #endif
